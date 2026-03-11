@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 import re
 import unicodedata
+from typing import Callable, Iterable
 
 import pandas as pd
 
@@ -31,6 +33,14 @@ class CleaningStats:
     def total_removed(self) -> int:
         return self.total_before - self.total_after
 
+    def merge(self, other: "CleaningStats") -> None:
+        self.total_before += other.total_before
+        self.total_after += other.total_after
+        self.removed_blank_rows += other.removed_blank_rows
+        self.removed_symbol_rows += other.removed_symbol_rows
+        self.removed_emoji_rows += other.removed_emoji_rows
+        self.removed_garbled_rows += other.removed_garbled_rows
+
 
 def load_dataframe(file_path: str | Path) -> pd.DataFrame:
     path = Path(file_path)
@@ -46,29 +56,70 @@ def load_dataframe(file_path: str | Path) -> pd.DataFrame:
     return pd.read_excel(path)
 
 
-def clean_dataframe(dataframe: pd.DataFrame) -> tuple[pd.DataFrame, CleaningStats]:
+def iter_dataframes(file_path: str | Path, chunksize: int = 50_000) -> Iterable[pd.DataFrame]:
+    path = Path(file_path)
+    if not path.exists() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise ValueError(
+            "未检测到支持的输入文件，请提供 csv 或 Excel 文件（.csv/.xls/.xlsx/.xlsm）。"
+        )
+
+    if path.suffix.lower() != ".csv":
+        raise ValueError("仅 csv 文件支持分块流式处理。")
+
+    return pd.read_csv(path, skip_blank_lines=False, chunksize=chunksize)
+
+
+def count_csv_rows(file_path: str | Path) -> int:
+    path = Path(file_path)
+    if not path.exists() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+        raise ValueError(
+            "未检测到支持的输入文件，请提供 csv 或 Excel 文件（.csv/.xls/.xlsx/.xlsm）。"
+        )
+    if path.suffix.lower() != ".csv":
+        raise ValueError("仅 csv 文件支持分块流式处理。")
+
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle)
+        try:
+            next(reader)
+        except StopIteration:
+            return 0
+        return sum(1 for _ in reader)
+
+
+def clean_dataframe(
+    dataframe: pd.DataFrame,
+    progress_callback: Callable[[int], None] | None = None,
+    report_every: int = 1_000,
+) -> tuple[pd.DataFrame, CleaningStats]:
     stats = CleaningStats(total_before=len(dataframe), total_after=0)
     keep_mask: list[bool] = []
+    processed_since_report = 0
 
     for _, row in dataframe.iterrows():
+        processed_since_report += 1
         row_text = _row_to_text(row)
         if _is_blank_text(row_text):
             stats.removed_blank_rows += 1
             keep_mask.append(False)
-            continue
-        if _is_emoji_only_text(row_text):
+        elif _is_emoji_only_text(row_text):
             stats.removed_emoji_rows += 1
             keep_mask.append(False)
-            continue
-        if _is_garbled_only_text(row_text):
+        elif _is_garbled_only_text(row_text):
             stats.removed_garbled_rows += 1
             keep_mask.append(False)
-            continue
-        if _is_symbol_only_text(row_text):
+        elif _is_symbol_only_text(row_text):
             stats.removed_symbol_rows += 1
             keep_mask.append(False)
-            continue
-        keep_mask.append(True)
+        else:
+            keep_mask.append(True)
+
+        if progress_callback and processed_since_report >= report_every:
+            progress_callback(processed_since_report)
+            processed_since_report = 0
+
+    if progress_callback and processed_since_report > 0:
+        progress_callback(processed_since_report)
 
     cleaned = dataframe.loc[keep_mask].reset_index(drop=True)
     stats.total_after = len(cleaned)

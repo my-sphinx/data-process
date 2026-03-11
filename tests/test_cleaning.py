@@ -32,3 +32,12 @@ def test_clean_dataframe_removes_invalid_rows() -> None:
 def test_load_dataframe_rejects_unsupported_file() -> None:
     with pytest.raises(ValueError):
         load_dataframe("input.txt")
+
+
+def test_clean_dataframe_reports_progress() -> None:
+    dataframe = pd.DataFrame({"text": ["正常内容", "!!!", "abc123"]})
+    reported: list[int] = []
+
+    clean_dataframe(dataframe, progress_callback=reported.append, report_every=2)
+
+    assert reported == [2, 1]
