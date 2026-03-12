@@ -32,6 +32,9 @@ class ProgressBar:
             return
         self._progress.update(amount)
 
+    def set_postfix(self, values: dict[str, object]) -> None:
+        self._progress.set_postfix(values)
+
     def set_summary(
         self,
         total_before: int,
@@ -42,7 +45,7 @@ class ProgressBar:
         removed_emoji_rows: int = 0,
         removed_garbled_rows: int = 0,
     ) -> None:
-        self._progress.set_postfix(
+        self.set_postfix(
             {
                 "总数": total_before,
                 "删除": total_removed,

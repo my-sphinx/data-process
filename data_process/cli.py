@@ -13,6 +13,7 @@ from data_process.cleaning import (
     iter_dataframes,
     load_dataframe,
 )
+from data_process.deduplication import DeduplicationStats, deduplicate_dataframe
 from data_process.progress import ProgressBar, run_stage
 
 
@@ -21,8 +22,8 @@ def main() -> int:
     parser.add_argument(
         "--action",
         required=True,
-        choices=["clean"],
-        help="要执行的功能。当前支持 clean。",
+        choices=["clean", "deduplicate"],
+        help="要执行的功能。当前支持 clean、deduplicate。",
     )
     parser.add_argument(
         "--input-file",
@@ -43,7 +44,7 @@ def main() -> int:
     parser.add_argument(
         "--target-column",
         default="text",
-        help="指定执行清洗判断的目标列名，默认 text。",
+        help="指定执行处理的目标列名，默认 text。",
     )
 
     args = parser.parse_args()
@@ -56,6 +57,8 @@ def main() -> int:
 
     if args.action == "clean":
         return _run_clean(args.input_file, args.output, args.chunk_size, args.target_column)
+    if args.action == "deduplicate":
+        return _run_deduplicate(args.input_file, args.output, args.chunk_size, args.target_column)
 
     parser.print_help()
     return 1
@@ -108,6 +111,54 @@ def _run_clean(
     run_stage("写出结果")
     _write_dataframe(cleaned, output_path)
     _print_stats(stats, output_path)
+    return 0
+
+
+def _run_deduplicate(
+    input_file: str,
+    output_arg: str | None,
+    chunk_size: int,
+    target_column: str,
+) -> int:
+    input_path = Path(input_file)
+    output_path = _resolve_deduplicate_output_path(input_path, output_arg)
+
+    if input_path.suffix.lower() == ".csv":
+        try:
+            stats = _run_deduplicate_csv_stream(input_path, output_path, chunk_size, target_column)
+        except ValueError as exc:
+            print(str(exc))
+            return 1
+        _print_deduplication_stats(stats, output_path)
+        return 0
+
+    try:
+        run_stage("读取文件")
+        dataframe = load_dataframe(input_file)
+        progress_bar = ProgressBar(total=len(dataframe), description="执行去重")
+        try:
+            deduplicated, stats = deduplicate_dataframe(
+                dataframe,
+                target_column=target_column,
+                progress_callback=progress_bar.advance,
+            )
+            progress_bar.set_postfix(
+                {
+                    "总数": stats.total_before,
+                    "重复": stats.duplicate_rows,
+                    "保留": stats.total_after,
+                    "唯一值": stats.unique_values,
+                }
+            )
+        finally:
+            progress_bar.close()
+    except ValueError as exc:
+        print(str(exc))
+        return 1
+
+    run_stage("写出结果")
+    _write_dataframe(deduplicated, output_path)
+    _print_deduplication_stats(stats, output_path)
     return 0
 
 
@@ -173,10 +224,76 @@ def _run_clean_csv_stream(
     return total_stats
 
 
+def _run_deduplicate_csv_stream(
+    input_path: Path,
+    output_path: Path,
+    chunk_size: int,
+    target_column: str,
+) -> DeduplicationStats:
+    total_stats = DeduplicationStats(total_before=0, total_after=0)
+    seen_keys: set[str] = set()
+
+    run_stage("统计总行数")
+    total_rows = count_csv_rows(input_path)
+    if output_path.exists():
+        output_path.unlink()
+    if total_rows == 0:
+        dedupe_bar = ProgressBar(total=1, description="分块去重")
+        dedupe_bar.set_postfix({"总数": 0, "重复": 0, "保留": 0, "唯一值": 0})
+        dedupe_bar.advance(1)
+        dedupe_bar.close()
+        write_bar = ProgressBar(total=1, description="写出结果")
+        pd.DataFrame().to_csv(output_path, index=False)
+        write_bar.advance(1)
+        write_bar.close()
+        return total_stats
+
+    progress_bar = ProgressBar(total=total_rows, description="分块去重")
+    chunk_total = math.ceil(total_rows / chunk_size)
+    write_bar = ProgressBar(total=chunk_total, description="写出结果")
+    wrote_header = False
+
+    try:
+        for chunk in iter_dataframes(input_path, chunksize=chunk_size):
+            deduplicated_chunk, chunk_stats = deduplicate_dataframe(
+                chunk,
+                target_column=target_column,
+                seen_keys=seen_keys,
+                progress_callback=progress_bar.advance,
+            )
+            total_stats.total_before += chunk_stats.total_before
+            total_stats.total_after += chunk_stats.total_after
+            total_stats.duplicate_rows += chunk_stats.duplicate_rows
+            total_stats.unique_values = len(seen_keys)
+            total_stats.target_column = chunk_stats.target_column
+            deduplicated_chunk.to_csv(output_path, mode="a", index=False, header=not wrote_header)
+            wrote_header = True
+            write_bar.advance(1)
+        progress_bar.set_postfix(
+            {
+                "总数": total_stats.total_before,
+                "重复": total_stats.duplicate_rows,
+                "保留": total_stats.total_after,
+                "唯一值": total_stats.unique_values,
+            }
+        )
+    finally:
+        progress_bar.close()
+        write_bar.close()
+
+    return total_stats
+
+
 def _resolve_output_path(input_path: Path, output_arg: str | None) -> Path:
     if output_arg:
         return Path(output_arg)
     return input_path.with_name(f"{input_path.stem}_cleaned{input_path.suffix}")
+
+
+def _resolve_deduplicate_output_path(input_path: Path, output_arg: str | None) -> Path:
+    if output_arg:
+        return Path(output_arg)
+    return input_path.with_name(f"{input_path.stem}_deduplicated{input_path.suffix}")
 
 
 def _write_dataframe(dataframe, output_path: Path) -> None:
@@ -196,3 +313,12 @@ def _print_stats(stats: CleaningStats, output_path: Path) -> None:
     print(f"删除全乱码行：{stats.removed_garbled_rows}")
     print(f"共删除：{stats.total_removed}")
     print(f"清洗后总行数：{stats.total_after}")
+
+
+def _print_deduplication_stats(stats: DeduplicationStats, output_path: Path) -> None:
+    print(f"去重完成，输出文件：{output_path}")
+    print(f"使用目标列：{stats.target_column}")
+    print(f"去重前总行数：{stats.total_before}")
+    print(f"删除重复行数：{stats.duplicate_rows}")
+    print(f"标准化后唯一值数量：{stats.unique_values}")
+    print(f"去重后总行数：{stats.total_after}")
