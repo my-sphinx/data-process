@@ -13,16 +13,20 @@ import pandas as pd
 from data_process.cleaning import (
     CleaningStats,
     clean_dataframe,
+)
+from data_process.deduplication import DeduplicationStats, deduplicate_dataframe
+from data_process.file_io import (
+    append_dataframe_chunk,
     count_csv_rows,
     iter_dataframes,
     load_dataframe,
+    write_dataframe,
+    write_match_rows,
 )
-from data_process.deduplication import DeduplicationStats, deduplicate_dataframe
 from data_process.logging_utils import close_logger, configure_logger
 from data_process.progress import ProgressBar, run_stage
 from data_process.semantic_deduplication import (
     DEFAULT_EMBEDDING_MODEL_PATH,
-    SemanticDeduplicationMatch,
     SemanticDeduplicator,
     semantic_deduplicate_dataframe,
 )
@@ -203,7 +207,7 @@ def _run_clean(
         progress_bar.close()
 
     run_stage("写出结果", logger=logger)
-    _write_dataframe(cleaned, output_path)
+    write_dataframe(cleaned, output_path)
     _write_meta(
         output_path=output_path,
         action="clean",
@@ -314,8 +318,8 @@ def _run_deduplicate(
         return 1
 
     run_stage("写出结果", logger=logger)
-    _write_dataframe(deduplicated, output_path)
-    _write_match_rows(match_rows, output_path)
+    write_dataframe(deduplicated, output_path)
+    write_match_rows(match_rows, _resolve_match_output_path(output_path))
     _write_meta(
         output_path=output_path,
         action="deduplicate",
@@ -427,8 +431,8 @@ def _run_clean_deduplicate(
         return 1
 
     run_stage("写出结果", logger=logger)
-    _write_dataframe(deduplicated, output_path)
-    _write_match_rows(match_rows, output_path)
+    write_dataframe(deduplicated, output_path)
+    write_match_rows(match_rows, _resolve_match_output_path(output_path))
     _write_meta(
         output_path=output_path,
         action="clean-deduplicate",
@@ -477,7 +481,7 @@ def _run_clean_csv_stream(
         empty_bar.advance(1)
         empty_bar.close()
         write_bar = ProgressBar(total=1, description="写出结果", logger=logger)
-        pd.DataFrame().to_csv(output_path, index=False)
+        write_dataframe(pd.DataFrame(), output_path)
         write_bar.advance(1)
         write_bar.close()
         return total_stats
@@ -495,8 +499,11 @@ def _run_clean_csv_stream(
                 progress_callback=progress_bar.advance,
             )
             total_stats.merge(chunk_stats)
-            cleaned_chunk.to_csv(output_path, mode="a", index=False, header=not wrote_header)
-            wrote_header = True
+            wrote_header = append_dataframe_chunk(
+                cleaned_chunk,
+                output_path,
+                wrote_header=wrote_header,
+            )
             write_bar.advance(1)
         progress_bar.set_summary(
             total_before=total_stats.total_before,
@@ -540,7 +547,7 @@ def _run_deduplicate_csv_stream(
         dedupe_bar.advance(1)
         dedupe_bar.close()
         write_bar = ProgressBar(total=1, description="写出结果", logger=logger)
-        pd.DataFrame().to_csv(output_path, index=False)
+        write_dataframe(pd.DataFrame(), output_path)
         write_bar.advance(1)
         write_bar.close()
         return total_stats
@@ -572,9 +579,12 @@ def _run_deduplicate_csv_stream(
             total_stats.embedding_model_path = chunk_stats.embedding_model_path
             # Keep semantic audit rows on disk while streaming so duplicate-heavy
             # datasets do not accumulate a second large in-memory result set.
-            _write_match_rows(chunk_match_rows, output_path, append=True)
-            deduplicated_chunk.to_csv(output_path, mode="a", index=False, header=not wrote_header)
-            wrote_header = True
+            write_match_rows(chunk_match_rows, match_output_path, append=True)
+            wrote_header = append_dataframe_chunk(
+                deduplicated_chunk,
+                output_path,
+                wrote_header=wrote_header,
+            )
             write_bar.advance(1)
         progress_bar.set_postfix(
             {
@@ -681,16 +691,6 @@ def _resolve_meta_output_path(output_path: Path) -> Path:
 
 def _resolve_log_path(output_path: Path) -> Path:
     return output_path.parent / "data-process.log"
-
-
-def _write_dataframe(dataframe, output_path: Path) -> None:
-    suffix = output_path.suffix.lower()
-    if suffix == ".csv":
-        dataframe.to_csv(output_path, index=False)
-        return
-    dataframe.to_excel(output_path, index=False)
-
-
 def _print_stats(stats: CleaningStats, output_path: Path, logger: Logger) -> None:
     _emit_message(f"清洗完成，输出文件：{output_path}", logger)
     _emit_message(f"清洗前总行数：{stats.total_before}", logger)
@@ -848,35 +848,3 @@ def _deduplicate_dataframe(
         progress_callback=progress_callback,
     )
     return deduplicated, stats, []
-
-
-def _write_match_rows(
-    match_rows: list[SemanticDeduplicationMatch],
-    output_path: Path,
-    append: bool = False,
-) -> None:
-    if not match_rows:
-        return
-
-    match_output_path = _resolve_match_output_path(output_path)
-    _build_match_frame(match_rows).to_csv(
-        match_output_path,
-        mode="a" if append else "w",
-        index=False,
-        header=not append or not match_output_path.exists(),
-    )
-
-
-def _build_match_frame(match_rows: list[SemanticDeduplicationMatch]) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                "row_index": match.row_index,
-                "duplicate_of_row_index": match.duplicate_of_row_index,
-                "text": match.text,
-                "matched_text": match.matched_text,
-                "similarity": match.similarity,
-            }
-            for match in match_rows
-        ]
-    )

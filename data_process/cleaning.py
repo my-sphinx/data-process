@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import csv
 from dataclasses import dataclass
-from pathlib import Path
 import re
 import unicodedata
-from typing import Callable, Iterable
+from typing import Callable
 
 import pandas as pd
 
-
-SUPPORTED_EXTENSIONS = {".csv", ".xls", ".xlsx", ".xlsm"}
+from data_process.file_io import load_dataframe
 DEFAULT_TARGET_COLUMNS = ("text", "用户问题", "客户问题", "用户输入")
 MOJIBAKE_CHARS = set("ÃÂÐÑØÞßæøåçðþŒœ€™¢£¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿")
 REPLACEMENT_CHARS = {"�", "\ufffd"}
@@ -41,53 +38,6 @@ class CleaningStats:
         self.removed_symbol_rows += other.removed_symbol_rows
         self.removed_emoji_rows += other.removed_emoji_rows
         self.removed_garbled_rows += other.removed_garbled_rows
-
-
-def load_dataframe(file_path: str | Path) -> pd.DataFrame:
-    path = Path(file_path)
-    if not path.exists() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-        raise ValueError(
-            "未检测到支持的输入文件，请提供 csv 或 Excel 文件（.csv/.xls/.xlsx/.xlsm）。"
-        )
-
-    suffix = path.suffix.lower()
-    if suffix == ".csv":
-        return pd.read_csv(path, skip_blank_lines=False)
-
-    return pd.read_excel(path)
-
-
-def iter_dataframes(file_path: str | Path, chunksize: int = 50_000) -> Iterable[pd.DataFrame]:
-    path = Path(file_path)
-    if not path.exists() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-        raise ValueError(
-            "未检测到支持的输入文件，请提供 csv 或 Excel 文件（.csv/.xls/.xlsx/.xlsm）。"
-        )
-
-    if path.suffix.lower() != ".csv":
-        raise ValueError("仅 csv 文件支持分块流式处理。")
-
-    return pd.read_csv(path, skip_blank_lines=False, chunksize=chunksize)
-
-
-def count_csv_rows(file_path: str | Path) -> int:
-    path = Path(file_path)
-    if not path.exists() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-        raise ValueError(
-            "未检测到支持的输入文件，请提供 csv 或 Excel 文件（.csv/.xls/.xlsx/.xlsm）。"
-        )
-    if path.suffix.lower() != ".csv":
-        raise ValueError("仅 csv 文件支持分块流式处理。")
-
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.reader(handle)
-        try:
-            next(reader)
-        except StopIteration:
-            return 0
-        return sum(1 for _ in reader)
-
-
 def clean_dataframe(
     dataframe: pd.DataFrame,
     target_column: str = "text",
