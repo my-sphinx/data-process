@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from logging import Logger
 from typing import TextIO
 
 from tqdm import tqdm
@@ -13,10 +14,12 @@ class ProgressBar:
         description: str = "清洗进度",
         stream: TextIO | None = None,
         width: int = 30,
+        logger: Logger | None = None,
     ) -> None:
         self.total = total
         self.description = description
         self.stream = stream or sys.stderr
+        self.logger = logger
         self._progress = tqdm(
             total=total,
             desc=description,
@@ -26,6 +29,8 @@ class ProgressBar:
             unit="row",
             disable=False,
         )
+        if self.logger:
+            self.logger.info("开始阶段：%s", self.description)
 
     def advance(self, amount: int) -> None:
         if amount <= 0:
@@ -58,6 +63,8 @@ class ProgressBar:
         )
 
     def close(self) -> None:
+        if self.logger:
+            self.logger.info("完成阶段：%s", self.description)
         self._progress.close()
 
 
@@ -65,8 +72,11 @@ def run_stage(
     description: str,
     stream: TextIO | None = None,
     total: int | None = 1,
+    logger: Logger | None = None,
 ) -> None:
     target_stream = stream or sys.stderr
+    if logger:
+        logger.info("开始阶段：%s", description)
     stage = tqdm(
         total=total,
         desc=description,
@@ -77,3 +87,5 @@ def run_stage(
     )
     stage.update(total or 1)
     stage.close()
+    if logger:
+        logger.info("完成阶段：%s", description)

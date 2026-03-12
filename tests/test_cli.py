@@ -34,6 +34,13 @@ def test_main_supports_action_flag(tmp_path, monkeypatch, capsys) -> None:
     assert "表情" in captured.err
     assert "乱码" in captured.err
     assert (tmp_path / "input_cleaned.csv").exists()
+    log_file = tmp_path / "data-process.log"
+    assert log_file.exists()
+    log_text = log_file.read_text(encoding="utf-8")
+    assert "开始执行 action=clean" in log_text
+    assert "开始阶段：统计总行数" in log_text
+    assert "完成阶段：分块清洗" in log_text
+    assert "清洗完成，输出文件" in log_text
 
 
 def test_main_supports_target_column(tmp_path, monkeypatch, capsys) -> None:
@@ -275,6 +282,13 @@ def test_main_supports_deduplicate_action(tmp_path, monkeypatch, capsys) -> None
     output_file = tmp_path / "input_deduplicated.csv"
     deduplicated = pd.read_csv(output_file)
     assert deduplicated["text"].tolist() == [" Hello  World ", "Another"]
+    log_file = tmp_path / "data-process.log"
+    assert log_file.exists()
+    log_text = log_file.read_text(encoding="utf-8")
+    assert "开始执行 action=deduplicate" in log_text
+    assert "开始阶段：统计总行数" in log_text
+    assert "完成阶段：分块去重" in log_text
+    assert "去重完成，输出文件" in log_text
 
 
 def test_main_deduplicates_with_target_column(tmp_path, monkeypatch, capsys) -> None:

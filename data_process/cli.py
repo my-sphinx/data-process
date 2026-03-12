@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import math
+from logging import Logger
 from pathlib import Path
 
 import pandas as pd
@@ -14,6 +15,7 @@ from data_process.cleaning import (
     load_dataframe,
 )
 from data_process.deduplication import DeduplicationStats, deduplicate_dataframe
+from data_process.logging_utils import close_logger, configure_logger
 from data_process.progress import ProgressBar, run_stage
 
 
@@ -72,24 +74,29 @@ def _run_clean(
 ) -> int:
     input_path = Path(input_file)
     output_path = _resolve_output_path(input_path, output_arg)
+    logger = configure_logger(_resolve_log_path(output_path))
+    logger.info("开始执行 action=clean input=%s output=%s", input_path, output_path)
 
     if input_path.suffix.lower() == ".csv":
         try:
-            stats = _run_clean_csv_stream(input_path, output_path, chunk_size, target_column)
+            stats = _run_clean_csv_stream(input_path, output_path, chunk_size, target_column, logger)
         except ValueError as exc:
-            print(str(exc))
+            _emit_error(str(exc), logger)
+            close_logger()
             return 1
-        _print_stats(stats, output_path)
+        _print_stats(stats, output_path, logger)
+        close_logger()
         return 0
 
     try:
-        run_stage("读取文件")
+        run_stage("读取文件", logger=logger)
         dataframe = load_dataframe(input_file)
     except ValueError as exc:
-        print(str(exc))
+        _emit_error(str(exc), logger)
+        close_logger()
         return 1
 
-    progress_bar = ProgressBar(total=len(dataframe), description="清洗数据")
+    progress_bar = ProgressBar(total=len(dataframe), description="清洗数据", logger=logger)
     try:
         cleaned, stats = clean_dataframe(
             dataframe,
@@ -108,9 +115,10 @@ def _run_clean(
     finally:
         progress_bar.close()
 
-    run_stage("写出结果")
+    run_stage("写出结果", logger=logger)
     _write_dataframe(cleaned, output_path)
-    _print_stats(stats, output_path)
+    _print_stats(stats, output_path, logger)
+    close_logger()
     return 0
 
 
@@ -122,20 +130,30 @@ def _run_deduplicate(
 ) -> int:
     input_path = Path(input_file)
     output_path = _resolve_deduplicate_output_path(input_path, output_arg)
+    logger = configure_logger(_resolve_log_path(output_path))
+    logger.info("开始执行 action=deduplicate input=%s output=%s", input_path, output_path)
 
     if input_path.suffix.lower() == ".csv":
         try:
-            stats = _run_deduplicate_csv_stream(input_path, output_path, chunk_size, target_column)
+            stats = _run_deduplicate_csv_stream(
+                input_path,
+                output_path,
+                chunk_size,
+                target_column,
+                logger,
+            )
         except ValueError as exc:
-            print(str(exc))
+            _emit_error(str(exc), logger)
+            close_logger()
             return 1
-        _print_deduplication_stats(stats, output_path)
+        _print_deduplication_stats(stats, output_path, logger)
+        close_logger()
         return 0
 
     try:
-        run_stage("读取文件")
+        run_stage("读取文件", logger=logger)
         dataframe = load_dataframe(input_file)
-        progress_bar = ProgressBar(total=len(dataframe), description="执行去重")
+        progress_bar = ProgressBar(total=len(dataframe), description="执行去重", logger=logger)
         try:
             deduplicated, stats = deduplicate_dataframe(
                 dataframe,
@@ -153,12 +171,14 @@ def _run_deduplicate(
         finally:
             progress_bar.close()
     except ValueError as exc:
-        print(str(exc))
+        _emit_error(str(exc), logger)
+        close_logger()
         return 1
 
-    run_stage("写出结果")
+    run_stage("写出结果", logger=logger)
     _write_dataframe(deduplicated, output_path)
-    _print_deduplication_stats(stats, output_path)
+    _print_deduplication_stats(stats, output_path, logger)
+    close_logger()
     return 0
 
 
@@ -167,14 +187,15 @@ def _run_clean_csv_stream(
     output_path: Path,
     chunk_size: int,
     target_column: str,
+    logger: Logger,
 ) -> CleaningStats:
     total_stats = CleaningStats(total_before=0, total_after=0)
-    run_stage("统计总行数")
+    run_stage("统计总行数", logger=logger)
     total_rows = count_csv_rows(input_path)
     if output_path.exists():
         output_path.unlink()
     if total_rows == 0:
-        empty_bar = ProgressBar(total=1, description="分块清洗")
+        empty_bar = ProgressBar(total=1, description="分块清洗", logger=logger)
         empty_bar.set_summary(
             total_before=0,
             total_removed=0,
@@ -186,15 +207,15 @@ def _run_clean_csv_stream(
         )
         empty_bar.advance(1)
         empty_bar.close()
-        write_bar = ProgressBar(total=1, description="写出结果")
+        write_bar = ProgressBar(total=1, description="写出结果", logger=logger)
         pd.DataFrame().to_csv(output_path, index=False)
         write_bar.advance(1)
         write_bar.close()
         return total_stats
 
-    progress_bar = ProgressBar(total=total_rows, description="分块清洗")
+    progress_bar = ProgressBar(total=total_rows, description="分块清洗", logger=logger)
     chunk_total = math.ceil(total_rows / chunk_size)
-    write_bar = ProgressBar(total=chunk_total, description="写出结果")
+    write_bar = ProgressBar(total=chunk_total, description="写出结果", logger=logger)
     wrote_header = False
 
     try:
@@ -229,28 +250,29 @@ def _run_deduplicate_csv_stream(
     output_path: Path,
     chunk_size: int,
     target_column: str,
+    logger: Logger,
 ) -> DeduplicationStats:
     total_stats = DeduplicationStats(total_before=0, total_after=0)
     seen_keys: set[str] = set()
 
-    run_stage("统计总行数")
+    run_stage("统计总行数", logger=logger)
     total_rows = count_csv_rows(input_path)
     if output_path.exists():
         output_path.unlink()
     if total_rows == 0:
-        dedupe_bar = ProgressBar(total=1, description="分块去重")
+        dedupe_bar = ProgressBar(total=1, description="分块去重", logger=logger)
         dedupe_bar.set_postfix({"总数": 0, "重复": 0, "保留": 0, "唯一值": 0})
         dedupe_bar.advance(1)
         dedupe_bar.close()
-        write_bar = ProgressBar(total=1, description="写出结果")
+        write_bar = ProgressBar(total=1, description="写出结果", logger=logger)
         pd.DataFrame().to_csv(output_path, index=False)
         write_bar.advance(1)
         write_bar.close()
         return total_stats
 
-    progress_bar = ProgressBar(total=total_rows, description="分块去重")
+    progress_bar = ProgressBar(total=total_rows, description="分块去重", logger=logger)
     chunk_total = math.ceil(total_rows / chunk_size)
-    write_bar = ProgressBar(total=chunk_total, description="写出结果")
+    write_bar = ProgressBar(total=chunk_total, description="写出结果", logger=logger)
     wrote_header = False
 
     try:
@@ -296,6 +318,10 @@ def _resolve_deduplicate_output_path(input_path: Path, output_arg: str | None) -
     return input_path.with_name(f"{input_path.stem}_deduplicated{input_path.suffix}")
 
 
+def _resolve_log_path(output_path: Path) -> Path:
+    return output_path.parent / "data-process.log"
+
+
 def _write_dataframe(dataframe, output_path: Path) -> None:
     suffix = output_path.suffix.lower()
     if suffix == ".csv":
@@ -304,21 +330,35 @@ def _write_dataframe(dataframe, output_path: Path) -> None:
     dataframe.to_excel(output_path, index=False)
 
 
-def _print_stats(stats: CleaningStats, output_path: Path) -> None:
-    print(f"清洗完成，输出文件：{output_path}")
-    print(f"清洗前总行数：{stats.total_before}")
-    print(f"删除空行：{stats.removed_blank_rows}")
-    print(f"删除全符号/标点行：{stats.removed_symbol_rows}")
-    print(f"删除全表情行：{stats.removed_emoji_rows}")
-    print(f"删除全乱码行：{stats.removed_garbled_rows}")
-    print(f"共删除：{stats.total_removed}")
-    print(f"清洗后总行数：{stats.total_after}")
+def _print_stats(stats: CleaningStats, output_path: Path, logger: Logger) -> None:
+    _emit_message(f"清洗完成，输出文件：{output_path}", logger)
+    _emit_message(f"清洗前总行数：{stats.total_before}", logger)
+    _emit_message(f"删除空行：{stats.removed_blank_rows}", logger)
+    _emit_message(f"删除全符号/标点行：{stats.removed_symbol_rows}", logger)
+    _emit_message(f"删除全表情行：{stats.removed_emoji_rows}", logger)
+    _emit_message(f"删除全乱码行：{stats.removed_garbled_rows}", logger)
+    _emit_message(f"共删除：{stats.total_removed}", logger)
+    _emit_message(f"清洗后总行数：{stats.total_after}", logger)
 
 
-def _print_deduplication_stats(stats: DeduplicationStats, output_path: Path) -> None:
-    print(f"去重完成，输出文件：{output_path}")
-    print(f"使用目标列：{stats.target_column}")
-    print(f"去重前总行数：{stats.total_before}")
-    print(f"删除重复行数：{stats.duplicate_rows}")
-    print(f"标准化后唯一值数量：{stats.unique_values}")
-    print(f"去重后总行数：{stats.total_after}")
+def _print_deduplication_stats(
+    stats: DeduplicationStats,
+    output_path: Path,
+    logger: Logger,
+) -> None:
+    _emit_message(f"去重完成，输出文件：{output_path}", logger)
+    _emit_message(f"使用目标列：{stats.target_column}", logger)
+    _emit_message(f"去重前总行数：{stats.total_before}", logger)
+    _emit_message(f"删除重复行数：{stats.duplicate_rows}", logger)
+    _emit_message(f"标准化后唯一值数量：{stats.unique_values}", logger)
+    _emit_message(f"去重后总行数：{stats.total_after}", logger)
+
+
+def _emit_message(message: str, logger: Logger) -> None:
+    print(message)
+    logger.info(message)
+
+
+def _emit_error(message: str, logger: Logger) -> None:
+    print(message)
+    logger.error(message)
