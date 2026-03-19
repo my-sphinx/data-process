@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import math
 import sys
 import types
@@ -269,6 +270,37 @@ def test_load_embedding_model_replays_non_benign_output(
 
     captured = capsys.readouterr()
     assert "loading custom backend" in captured.out
+
+
+def test_load_embedding_model_tolerates_missing_stdio_fileno(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    model_dir = tmp_path / "m3e-base"
+    model_dir.mkdir()
+
+    class FakeSentenceTransformer:
+        def __init__(self, _model_path: str, **_kwargs) -> None:
+            print("loading without stdio fileno")
+
+    class NoFilenoStream(io.StringIO):
+        def fileno(self) -> int:
+            raise io.UnsupportedOperation("no fileno")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        types.SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+    )
+    monkeypatch.setattr(sys, "__stdout__", NoFilenoStream())
+    monkeypatch.setattr(sys, "__stderr__", NoFilenoStream())
+
+    model = _load_embedding_model(model_dir)
+
+    captured = capsys.readouterr()
+    assert isinstance(model, FakeSentenceTransformer)
+    assert "loading without stdio fileno" in captured.out
 
 
 def test_create_faiss_index_supports_hnsw(monkeypatch) -> None:

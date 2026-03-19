@@ -316,6 +316,11 @@ def _run_deduplicate(
         _emit_error(str(exc), logger)
         close_logger()
         return 1
+    except Exception as exc:
+        logger.exception("执行去重失败")
+        _emit_error(f"执行去重失败：{type(exc).__name__}: {exc}", logger)
+        close_logger()
+        return 1
 
     run_stage("写出结果", logger=logger)
     write_dataframe(deduplicated, output_path)
@@ -427,6 +432,11 @@ def _run_clean_deduplicate(
             dedupe_bar.close()
     except ValueError as exc:
         _emit_error(str(exc), logger)
+        close_logger()
+        return 1
+    except Exception as exc:
+        logger.exception("执行清洗去重失败")
+        _emit_error(f"执行清洗去重失败：{type(exc).__name__}: {exc}", logger)
         close_logger()
         return 1
 

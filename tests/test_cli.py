@@ -682,3 +682,65 @@ def test_main_rejects_invalid_semantic_hnsw_m(monkeypatch, capsys) -> None:
 
     assert exit_code == 1
     assert "--semantic-hnsw-m 必须是大于 0 的整数。" in captured.out
+
+
+def test_main_reports_unexpected_semantic_deduplicate_error(tmp_path, monkeypatch, capsys) -> None:
+    input_file = tmp_path / "input.xlsx"
+    pd.DataFrame({"text": ["退款怎么申请"]}).to_excel(input_file, index=False)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("model backend crashed")
+
+    monkeypatch.setattr(cli, "semantic_deduplicate_dataframe", boom)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "--action",
+            "deduplicate",
+            "--input-file",
+            str(input_file),
+            "--dedupe-mode",
+            "semantic",
+        ],
+    )
+
+    exit_code = main()
+    captured = capsys.readouterr()
+    log_text = (tmp_path / "data-process.log").read_text(encoding="utf-8")
+
+    assert exit_code == 1
+    assert "执行去重失败：RuntimeError: model backend crashed" in captured.out
+    assert "执行去重失败" in log_text
+
+
+def test_main_reports_unexpected_clean_deduplicate_error(tmp_path, monkeypatch, capsys) -> None:
+    input_file = tmp_path / "input.xlsx"
+    pd.DataFrame({"text": ["退款怎么申请"]}).to_excel(input_file, index=False)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("model backend crashed")
+
+    monkeypatch.setattr(cli, "semantic_deduplicate_dataframe", boom)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "--action",
+            "clean-deduplicate",
+            "--input-file",
+            str(input_file),
+            "--dedupe-mode",
+            "semantic",
+        ],
+    )
+
+    exit_code = main()
+    captured = capsys.readouterr()
+    log_text = (tmp_path / "data-process.log").read_text(encoding="utf-8")
+
+    assert exit_code == 1
+    assert "执行清洗去重失败：RuntimeError: model backend crashed" in captured.out
+    assert "执行清洗去重失败" in log_text

@@ -339,6 +339,7 @@ def _load_embedding_model(model_path: Path):
 
     stdout_buffer = io.StringIO()
     stderr_buffer = io.StringIO()
+    process_output: _CapturedProcessOutput | None = None
 
     try:
         with (
@@ -351,14 +352,14 @@ def _load_embedding_model(model_path: Path):
         _replay_model_load_output(
             stdout_text=stdout_buffer.getvalue(),
             stderr_text=stderr_buffer.getvalue(),
-            process_text=process_output.read(),
+            process_text=process_output.read() if process_output is not None else "",
         )
         raise
 
     _replay_model_load_output(
         stdout_text=stdout_buffer.getvalue(),
         stderr_text=stderr_buffer.getvalue(),
-        process_text=process_output.read(),
+        process_text=process_output.read() if process_output is not None else "",
     )
     return model
 
@@ -377,7 +378,10 @@ def _replay_model_load_output(stdout_text: str, stderr_text: str, process_text: 
     if stderr_text:
         sys.stderr.write(stderr_text)
     if process_text:
-        os.write(sys.__stdout__.fileno(), process_text.encode())
+        try:
+            os.write(sys.__stdout__.fileno(), process_text.encode())
+        except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+            sys.stdout.write(process_text)
 
 
 def _is_benign_model_load_output(output: str) -> bool:
@@ -404,23 +408,30 @@ class _capture_process_output:
     def __enter__(self) -> _CapturedProcessOutput:
         self._stdout_file = tempfile.TemporaryFile(mode="w+b")
         self._stderr_file = tempfile.TemporaryFile(mode="w+b")
+        self._stdout_fd: int | None = None
+        self._stderr_fd: int | None = None
         sys.stdout.flush()
         sys.stderr.flush()
         # Some model backends write directly to the process file descriptors
         # instead of Python's sys.stdout/sys.stderr, so redirect both layers.
-        self._stdout_fd = os.dup(sys.__stdout__.fileno())
-        self._stderr_fd = os.dup(sys.__stderr__.fileno())
-        os.dup2(self._stdout_file.fileno(), sys.__stdout__.fileno())
-        os.dup2(self._stderr_file.fileno(), sys.__stderr__.fileno())
+        try:
+            self._stdout_fd = os.dup(sys.__stdout__.fileno())
+            self._stderr_fd = os.dup(sys.__stderr__.fileno())
+            os.dup2(self._stdout_file.fileno(), sys.__stdout__.fileno())
+            os.dup2(self._stderr_file.fileno(), sys.__stderr__.fileno())
+        except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+            self._stdout_fd = None
+            self._stderr_fd = None
         return _CapturedProcessOutput(self._stdout_file, self._stderr_file)
 
     def __exit__(self, exc_type, exc, exc_tb) -> None:
         sys.stdout.flush()
         sys.stderr.flush()
-        os.dup2(self._stdout_fd, sys.__stdout__.fileno())
-        os.dup2(self._stderr_fd, sys.__stderr__.fileno())
-        os.close(self._stdout_fd)
-        os.close(self._stderr_fd)
+        if self._stdout_fd is not None and self._stderr_fd is not None:
+            os.dup2(self._stdout_fd, sys.__stdout__.fileno())
+            os.dup2(self._stderr_fd, sys.__stderr__.fileno())
+            os.close(self._stdout_fd)
+            os.close(self._stderr_fd)
         self._stdout_file.flush()
         self._stderr_file.flush()
 
