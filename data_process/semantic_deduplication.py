@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 
 from data_process.cleaning import resolve_target_column
@@ -443,7 +444,59 @@ def _safe_flush(stream) -> None:
         return
 
 
+class _NumpyFlatIPIndex:
+    def __init__(self, dimension: int, initial_capacity: int = 1024) -> None:
+        self.dimension = dimension
+        self._capacity = max(initial_capacity, 1)
+        self._matrix = np.empty((self._capacity, dimension), dtype=np.float32)
+        self._size = 0
+
+    @property
+    def ntotal(self) -> int:
+        return self._size
+
+    def add(self, vectors) -> None:
+        array = np.asarray(vectors, dtype=np.float32)
+        if array.ndim == 1:
+            array = array.reshape(1, -1)
+        if array.shape[1] != self.dimension:
+            raise ValueError(f"向量维度不匹配：期望 {self.dimension}，实际 {array.shape[1]}")
+
+        needed = self._size + array.shape[0]
+        if needed > self._capacity:
+            while self._capacity < needed:
+                self._capacity *= 2
+            expanded = np.empty((self._capacity, self.dimension), dtype=np.float32)
+            expanded[: self._size] = self._matrix[: self._size]
+            self._matrix = expanded
+
+        self._matrix[self._size : needed] = array
+        self._size = needed
+
+    def search(self, query, top_k: int):
+        if self._size == 0:
+            return np.zeros((1, top_k), dtype=np.float32), np.full((1, top_k), -1, dtype=np.int64)
+
+        query_array = np.asarray(query, dtype=np.float32)
+        if query_array.ndim == 1:
+            query_array = query_array.reshape(1, -1)
+
+        scores = query_array @ self._matrix[: self._size].T
+        if top_k == 1:
+            best_indices = np.argmax(scores, axis=1)
+            best_scores = scores[np.arange(len(best_indices)), best_indices]
+            return best_scores.reshape(-1, 1), best_indices.reshape(-1, 1)
+
+        ranked = np.argsort(scores, axis=1)[:, -top_k:][:, ::-1]
+        ranked_scores = np.take_along_axis(scores, ranked, axis=1)
+        return ranked_scores, ranked
+
+
 def _create_faiss_index(dimension: int, index_type: str = "flat", hnsw_m: int = 32):
+    if index_type == "flat" and os.name == "nt":
+        # Avoid Windows-native access violations observed in faiss flat search/add paths.
+        return _NumpyFlatIPIndex(dimension)
+
     try:
         import faiss
     except ImportError as exc:
