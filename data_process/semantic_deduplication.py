@@ -410,8 +410,8 @@ class _capture_process_output:
         self._stderr_file = tempfile.TemporaryFile(mode="w+b")
         self._stdout_fd: int | None = None
         self._stderr_fd: int | None = None
-        sys.stdout.flush()
-        sys.stderr.flush()
+        _safe_flush(sys.stdout)
+        _safe_flush(sys.stderr)
         # Some model backends write directly to the process file descriptors
         # instead of Python's sys.stdout/sys.stderr, so redirect both layers.
         try:
@@ -425,8 +425,8 @@ class _capture_process_output:
         return _CapturedProcessOutput(self._stdout_file, self._stderr_file)
 
     def __exit__(self, exc_type, exc, exc_tb) -> None:
-        sys.stdout.flush()
-        sys.stderr.flush()
+        _safe_flush(sys.stdout)
+        _safe_flush(sys.stderr)
         if self._stdout_fd is not None and self._stderr_fd is not None:
             os.dup2(self._stdout_fd, sys.__stdout__.fileno())
             os.dup2(self._stderr_fd, sys.__stderr__.fileno())
@@ -434,6 +434,13 @@ class _capture_process_output:
             os.close(self._stderr_fd)
         self._stdout_file.flush()
         self._stderr_file.flush()
+
+
+def _safe_flush(stream) -> None:
+    try:
+        stream.flush()
+    except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+        return
 
 
 def _create_faiss_index(dimension: int, index_type: str = "flat", hnsw_m: int = 32):

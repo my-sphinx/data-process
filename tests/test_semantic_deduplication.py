@@ -10,6 +10,7 @@ import pandas as pd
 from data_process.semantic_deduplication import (
     SemanticDeduplicator,
     _create_faiss_index,
+    _capture_process_output,
     _load_embedding_model,
     semantic_deduplicate_dataframe,
 )
@@ -301,6 +302,18 @@ def test_load_embedding_model_tolerates_missing_stdio_fileno(
     captured = capsys.readouterr()
     assert isinstance(model, FakeSentenceTransformer)
     assert "loading without stdio fileno" in captured.out
+
+
+def test_capture_process_output_tolerates_flush_oserror(monkeypatch) -> None:
+    class BrokenFlushStream(io.StringIO):
+        def flush(self) -> None:
+            raise OSError(6, "Invalid handle")
+
+    monkeypatch.setattr(sys, "stdout", BrokenFlushStream())
+    monkeypatch.setattr(sys, "stderr", BrokenFlushStream())
+
+    with _capture_process_output() as output:
+        assert output is not None
 
 
 def test_create_faiss_index_supports_hnsw(monkeypatch) -> None:
