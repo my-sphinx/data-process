@@ -1,4 +1,4 @@
-from data_process.cli import main
+from mysphinx_forge.cli import main
 
 
 if __name__ == "__main__":

@@ -8,8 +8,8 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from data_process.cleaning import resolve_target_column
-from data_process.embedding import load_embedding_model
+from mysphinx_forge.cleaning import resolve_target_column
+from mysphinx_forge.embedding import load_embedding_model
 
 
 DEFAULT_CLUSTER_RANDOM_STATE = 42

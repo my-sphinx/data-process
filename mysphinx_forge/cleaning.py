@@ -7,7 +7,7 @@ from typing import Callable
 
 import pandas as pd
 
-from data_process.file_io import load_dataframe
+from mysphinx_forge.file_io import load_dataframe
 
 DEFAULT_TARGET_COLUMNS = ("text", "用户问题", "客户问题", "用户输入")
 MOJIBAKE_CHARS = set("ÃÂÐÑØÞßæøåçðþŒœ€™¢£¥¦§¨©ª«¬®¯°±²³´µ¶·¸¹º»¼½¾¿")

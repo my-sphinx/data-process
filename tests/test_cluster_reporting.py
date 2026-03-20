@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pandas as pd
 
-from data_process.cluster_reporting import (
+from mysphinx_forge.cluster_reporting import (
     build_cluster_analysis_report,
     render_cluster_report_html,
 )
-from data_process.clustering import ClusteringStats
+from mysphinx_forge.clustering import ClusteringStats
 
 
 def test_build_cluster_analysis_report_adds_rank_and_ratio() -> None:

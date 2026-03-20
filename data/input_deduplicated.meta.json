@@ -1,9 +1,9 @@
 {
   "generated_at": "2026-03-19T09:42:06.200451+00:00",
   "action": "clean-deduplicate",
-  "input_file": "/Users/dereck/Code/pingan/data-process/data/input.xlsx",
-  "output_file": "/Users/dereck/Code/pingan/data-process/data/input_deduplicated.xlsx",
-  "log_file": "/Users/dereck/Code/pingan/data-process/data/data-process.log",
+  "input_file": "/Users/dereck/Code/my-sphinx/mysphinx-forge/data/input.xlsx",
+  "output_file": "/Users/dereck/Code/my-sphinx/mysphinx-forge/data/input_deduplicated.xlsx",
+  "log_file": "/Users/dereck/Code/my-sphinx/mysphinx-forge/data/mysphinx-forge.log",
   "parameters": {
     "chunk_size": 50000,
     "target_column": "text",
@@ -31,5 +31,5 @@
     "unique_values": 786,
     "total_after": 786
   },
-  "match_file": "/Users/dereck/Code/pingan/data-process/data/input_deduplicated_matches.csv"
+  "match_file": "/Users/dereck/Code/my-sphinx/mysphinx-forge/data/input_deduplicated_matches.csv"
 }

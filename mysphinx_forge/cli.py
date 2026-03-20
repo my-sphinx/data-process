@@ -10,17 +10,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from data_process.cleaning import (
+from mysphinx_forge.cleaning import (
     CleaningStats,
     clean_dataframe,
 )
-from data_process.clustering import ClusteringStats, TextClusterer
-from data_process.cluster_reporting import (
+from mysphinx_forge.clustering import ClusteringStats, TextClusterer
+from mysphinx_forge.cluster_reporting import (
     build_cluster_analysis_report,
     render_cluster_report_html,
 )
-from data_process.deduplication import DeduplicationStats, deduplicate_dataframe
-from data_process.file_io import (
+from mysphinx_forge.deduplication import DeduplicationStats, deduplicate_dataframe
+from mysphinx_forge.file_io import (
     append_dataframe_chunk,
     count_csv_rows,
     iter_dataframes,
@@ -28,9 +28,9 @@ from data_process.file_io import (
     write_dataframe,
     write_match_rows,
 )
-from data_process.logging_utils import close_logger, configure_logger
-from data_process.progress import ProgressBar, run_stage
-from data_process.semantic_deduplication import (
+from mysphinx_forge.logging_utils import close_logger, configure_logger
+from mysphinx_forge.progress import ProgressBar, run_stage
+from mysphinx_forge.semantic_deduplication import (
     DEFAULT_EMBEDDING_MODEL_PATH,
     SemanticDeduplicator,
     semantic_deduplicate_dataframe,
@@ -916,7 +916,7 @@ def _resolve_meta_output_path(output_path: Path) -> Path:
 
 
 def _resolve_log_path(output_path: Path) -> Path:
-    return output_path.parent / "data-process.log"
+    return output_path.parent / "mysphinx-forge.log"
 
 
 def _print_stats(stats: CleaningStats, output_path: Path, logger: Logger) -> None:

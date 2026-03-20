@@ -5,11 +5,11 @@ import sys
 
 import pandas as pd
 
-from data_process import cli
-from data_process.cli import main
-from data_process.clustering import ClusteringStats
-from data_process.deduplication import DeduplicationStats
-from data_process.semantic_deduplication import SemanticDeduplicationMatch
+from mysphinx_forge import cli
+from mysphinx_forge.cli import main
+from mysphinx_forge.clustering import ClusteringStats
+from mysphinx_forge.deduplication import DeduplicationStats
+from mysphinx_forge.semantic_deduplication import SemanticDeduplicationMatch
 
 
 def test_main_supports_action_flag(tmp_path, monkeypatch, capsys) -> None:
@@ -38,7 +38,7 @@ def test_main_supports_action_flag(tmp_path, monkeypatch, capsys) -> None:
     assert "表情" in captured.err
     assert "乱码" in captured.err
     assert (tmp_path / "input_cleaned.csv").exists()
-    log_file = tmp_path / "data-process.log"
+    log_file = tmp_path / "mysphinx-forge.log"
     assert log_file.exists()
     log_text = log_file.read_text(encoding="utf-8")
     assert "开始执行 action=clean" in log_text
@@ -293,7 +293,7 @@ def test_main_supports_deduplicate_action(tmp_path, monkeypatch, capsys) -> None
     output_file = tmp_path / "input_deduplicated.csv"
     deduplicated = pd.read_csv(output_file)
     assert deduplicated["text"].tolist() == [" Hello  World ", "Another"]
-    log_file = tmp_path / "data-process.log"
+    log_file = tmp_path / "mysphinx-forge.log"
     assert log_file.exists()
     log_text = log_file.read_text(encoding="utf-8")
     assert "开始执行 action=deduplicate" in log_text
@@ -955,7 +955,7 @@ def test_main_supports_clean_deduplicate_action(tmp_path, monkeypatch, capsys) -
     assert match_rows["category"].tolist() == ["售后-重复"]
     assert match_rows["matched_category"].tolist() == ["售后"]
     assert match_rows["same_category"].tolist() == [False]
-    log_text = (tmp_path / "data-process.log").read_text(encoding="utf-8")
+    log_text = (tmp_path / "mysphinx-forge.log").read_text(encoding="utf-8")
     assert "开始执行 action=clean-deduplicate" in log_text
     meta = json.loads((tmp_path / "input_deduplicated.meta.json").read_text(encoding="utf-8"))
     assert meta["action"] == "clean-deduplicate"
@@ -1147,7 +1147,7 @@ def test_main_reports_unexpected_semantic_deduplicate_error(tmp_path, monkeypatc
 
     exit_code = main()
     captured = capsys.readouterr()
-    log_text = (tmp_path / "data-process.log").read_text(encoding="utf-8")
+    log_text = (tmp_path / "mysphinx-forge.log").read_text(encoding="utf-8")
 
     assert exit_code == 1
     assert "执行去重失败：RuntimeError: model backend crashed" in captured.out
@@ -1178,7 +1178,7 @@ def test_main_reports_unexpected_clean_deduplicate_error(tmp_path, monkeypatch, 
 
     exit_code = main()
     captured = capsys.readouterr()
-    log_text = (tmp_path / "data-process.log").read_text(encoding="utf-8")
+    log_text = (tmp_path / "mysphinx-forge.log").read_text(encoding="utf-8")
 
     assert exit_code == 1
     assert "执行清洗去重失败：RuntimeError: model backend crashed" in captured.out

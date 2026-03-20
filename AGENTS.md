@@ -8,7 +8,7 @@ The repository is currently a small Python 3.12 project.
 - `models/`: local model assets used by tooling. Keep large model files here and document additions in `models/README.md`.
 - `README.md`: top-level project overview. Expand this when user-facing behavior is added.
 
-For new application code, prefer creating a dedicated package directory instead of growing `main.py`. For example: `data_process/ingest.py` or `data_process/pipeline/`.
+For new application code, prefer creating a dedicated package directory instead of growing `main.py`. For example: `mysphinx_forge/ingest.py` or `mysphinx_forge/pipeline/`.
 
 ## Build, Test, and Development Commands
 - If `uv` is not installed, install it first:

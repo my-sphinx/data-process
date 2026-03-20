@@ -1,7 +1,7 @@
 [project]
-name = "data-process"
+name = "mysphinx-forge"
 version = "0.1.0"
-description = "Small data processing toolkit"
+description = "Data and model workflow toolkit for cleaning, clustering, generation, and evaluation"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

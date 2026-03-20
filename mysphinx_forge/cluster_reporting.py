@@ -5,7 +5,7 @@ from html import escape
 
 import pandas as pd
 
-from data_process.clustering import ClusteringStats
+from mysphinx_forge.clustering import ClusteringStats
 
 
 def build_cluster_analysis_report(

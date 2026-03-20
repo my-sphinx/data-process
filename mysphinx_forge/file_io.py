@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Iterable
 import pandas as pd
 
 if TYPE_CHECKING:
-    from data_process.semantic_deduplication import SemanticDeduplicationMatch
+    from mysphinx_forge.semantic_deduplication import SemanticDeduplicationMatch
 
 
 SUPPORTED_EXTENSIONS = {".csv", ".xls", ".xlsx", ".xlsm"}

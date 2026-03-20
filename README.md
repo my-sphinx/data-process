@@ -1,19 +1,19 @@
-# data-process
+# MySphinx Forge
 
-一个逐步演进的数据处理工具仓库。当前已实现 `数据清洗`、`数据去重`、`语义聚类`，以及显式流水线 `先清洗再去重`。
+`MySphinx Forge` 是一个逐步演进的数据与模型工作流工具仓库。当前已实现 `数据清洗`、`数据去重`、`语义聚类`，以及显式流水线 `先清洗再去重`。
 
-执行清洗、去重或聚类时，终端会通过 `tqdm` 实时显示多阶段进度条；任务完成后会继续输出最终统计信息。`csv` 默认展示 `统计总行数 -> 分块处理 -> 写出结果`，`Excel` 展示 `读取文件 -> 执行处理 -> 写出结果`。清洗阶段完成时，进度条尾部会附带 `总数 / 删除 / 保留` 摘要，以及 `空行 / 符号 / 表情 / 乱码` 的删除分布；去重阶段会展示 `总数 / 重复 / 保留 / 唯一值` 摘要；聚类阶段会展示 `总数 / 簇数 / 噪声 / 入簇` 摘要。每次运行还会在输出文件同目录生成统一日志文件 `data-process.log`，写入阶段日志、错误信息和最终统计；同时会为每个结果文件生成对应的 `*.meta.json` 元数据文件。
+执行清洗、去重或聚类时，终端会通过 `tqdm` 实时显示多阶段进度条；任务完成后会继续输出最终统计信息。`csv` 默认展示 `统计总行数 -> 分块处理 -> 写出结果`，`Excel` 展示 `读取文件 -> 执行处理 -> 写出结果`。清洗阶段完成时，进度条尾部会附带 `总数 / 删除 / 保留` 摘要，以及 `空行 / 符号 / 表情 / 乱码` 的删除分布；去重阶段会展示 `总数 / 重复 / 保留 / 唯一值` 摘要；聚类阶段会展示 `总数 / 簇数 / 噪声 / 入簇` 摘要。每次运行还会在输出文件同目录生成统一日志文件 `mysphinx-forge.log`，写入阶段日志、错误信息和最终统计；同时会为每个结果文件生成对应的 `*.meta.json` 元数据文件。
 
 ## 模块划分
 
-- `data_process/file_io.py`：集中处理 `csv` / `Excel` 的读取、分块读取和结果写出。
-- `data_process/cleaning.py`：只负责数据清洗规则与清洗统计，不再承担读写细节。
-- `data_process/deduplication.py`：负责标准化后的精确去重。
-- `data_process/semantic_deduplication.py`：负责基于 embedding + `faiss` 的语义去重。
-- `data_process/clustering.py`：负责基于 embedding 的 `HDBSCAN` / `KMeans` 文本聚类。
-- `data_process/cluster_reporting.py`：负责聚类分析报表与 HTML 可视化报告生成。
-- `data_process/cli.py`：负责编排命令行参数、阶段流程、日志和元数据写出。
-- `data_process/embedding.py`：集中处理本地 embedding 模型加载与输出抑制。
+- `mysphinx_forge/file_io.py`：集中处理 `csv` / `Excel` 的读取、分块读取和结果写出。
+- `mysphinx_forge/cleaning.py`：只负责数据清洗规则与清洗统计，不再承担读写细节。
+- `mysphinx_forge/deduplication.py`：负责标准化后的精确去重。
+- `mysphinx_forge/semantic_deduplication.py`：负责基于 embedding + `faiss` 的语义去重。
+- `mysphinx_forge/clustering.py`：负责基于 embedding 的 `HDBSCAN` / `KMeans` 文本聚类。
+- `mysphinx_forge/cluster_reporting.py`：负责聚类分析报表与 HTML 可视化报告生成。
+- `mysphinx_forge/cli.py`：负责编排命令行参数、阶段流程、日志和元数据写出。
+- `mysphinx_forge/embedding.py`：集中处理本地 embedding 模型加载与输出抑制。
 
 ## 使用方式
 
@@ -194,7 +194,7 @@ uv run python main.py --action cluster --input-file <输入文件路径> --clust
 
 ## 日志文件
 
-每次执行 `clean`、`deduplicate`、`clean-deduplicate` 或 `cluster` 时，程序都会在输出文件同目录生成或追加写入 `data-process.log`。日志会记录：
+每次执行 `clean`、`deduplicate`、`clean-deduplicate` 或 `cluster` 时，程序都会在输出文件同目录生成或追加写入 `mysphinx-forge.log`。日志会记录：
 
 - 本次执行的 action、输入文件和输出文件
 - 各处理阶段的开始和完成状态
@@ -271,6 +271,6 @@ uv run python main.py --action cluster --input-file <输入文件路径> --clust
 - 支持显式流水线 `clean-deduplicate`
 - 去重标准固定为：去首尾空格、压缩连续空白、大小写归一
 - 语义去重可通过 `--semantic-threshold` 调整判重保守程度
-- 每次运行会在输出目录写入统一日志文件 `data-process.log`
+- 每次运行会在输出目录写入统一日志文件 `mysphinx-forge.log`
 - 每个输出结果都会生成对应的 `*.meta.json` 元数据文件
 - 输出清洗和去重统计信息

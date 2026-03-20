@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from data_process.file_io import (
+from mysphinx_forge.file_io import (
     append_dataframe_chunk,
     build_match_frame,
     count_csv_rows,
@@ -12,7 +12,7 @@ from data_process.file_io import (
     write_dataframe,
     write_match_rows,
 )
-from data_process.semantic_deduplication import SemanticDeduplicationMatch
+from mysphinx_forge.semantic_deduplication import SemanticDeduplicationMatch
 
 
 def test_load_dataframe_supports_csv_and_excel(tmp_path) -> None:

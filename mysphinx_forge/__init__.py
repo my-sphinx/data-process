@@ -1,0 +1,1 @@
+"""MySphinx Forge core package."""

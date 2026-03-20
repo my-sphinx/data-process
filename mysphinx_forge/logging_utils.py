@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 
-LOGGER_NAME = "data_process"
+LOGGER_NAME = "mysphinx_forge"
 
 
 def configure_logger(log_path: Path) -> logging.Logger:

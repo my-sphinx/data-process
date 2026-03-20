@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from data_process.cleaning import clean_dataframe, load_dataframe
+from mysphinx_forge.cleaning import clean_dataframe, load_dataframe
 
 
 def test_clean_dataframe_removes_invalid_rows() -> None:

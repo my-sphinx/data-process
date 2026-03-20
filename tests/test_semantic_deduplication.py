@@ -7,7 +7,7 @@ import types
 
 import pandas as pd
 
-from data_process.semantic_deduplication import (
+from mysphinx_forge.semantic_deduplication import (
     SemanticDeduplicator,
     _create_faiss_index,
     _capture_process_output,
@@ -347,7 +347,7 @@ def test_capture_process_output_tolerates_flush_oserror(monkeypatch) -> None:
 
 
 def test_create_faiss_index_uses_numpy_flat_backend_on_windows(monkeypatch) -> None:
-    monkeypatch.setattr("data_process.semantic_deduplication.os.name", "nt")
+    monkeypatch.setattr("mysphinx_forge.semantic_deduplication.os.name", "nt")
 
     index = _create_faiss_index(dimension=2, index_type="flat")
     index.add([[1.0, 0.0], [0.0, 1.0]])

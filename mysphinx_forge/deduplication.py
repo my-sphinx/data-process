@@ -6,7 +6,7 @@ from typing import Callable
 
 import pandas as pd
 
-from data_process.cleaning import resolve_target_column
+from mysphinx_forge.cleaning import resolve_target_column
 
 
 WHITESPACE_RE = re.compile(r"\s+")

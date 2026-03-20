@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from data_process.clustering import TextClusterer
+from mysphinx_forge.clustering import TextClusterer
 
 
 class FakeModel:

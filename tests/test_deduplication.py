@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from data_process.deduplication import deduplicate_dataframe, normalize_dedup_text
+from mysphinx_forge.deduplication import deduplicate_dataframe, normalize_dedup_text
 
 
 def test_deduplicate_dataframe_normalizes_text_before_comparing() -> None:

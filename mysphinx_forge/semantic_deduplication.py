@@ -8,9 +8,9 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from data_process.cleaning import resolve_target_column
-from data_process.deduplication import DeduplicationStats, normalize_dedup_text
-from data_process.embedding import (
+from mysphinx_forge.cleaning import resolve_target_column
+from mysphinx_forge.deduplication import DeduplicationStats, normalize_dedup_text
+from mysphinx_forge.embedding import (
     _capture_process_output,
     load_embedding_model,
 )
