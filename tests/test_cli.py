@@ -1257,6 +1257,7 @@ def test_main_supports_model_test_action(monkeypatch, capsys, tmp_path) -> None:
 
     assert exit_code == 0
     assert calls["model_path"] == "models/custom-model"
+    assert calls["system_prompt"]
     assert calls["max_new_tokens"] == 64
     assert calls["do_sample"] is False
     assert calls["temperature"] == 1.0
@@ -1266,6 +1267,7 @@ def test_main_supports_model_test_action(monkeypatch, capsys, tmp_path) -> None:
     assert "模型测试完成" in captured.out
     assert "模型路径：models/custom-model" in captured.out
     assert "测试输入：请问退款怎么申请？" in captured.out
+    assert "系统指令：" in captured.out
     assert "模型类型：AutoModelForCausalLM" in captured.out
     assert "Tokenizer 类型：AutoTokenizer" in captured.out
     assert "推理设备：cuda" in captured.out
@@ -1323,6 +1325,7 @@ def test_main_supports_model_path_alias_for_model_test(monkeypatch, capsys, tmp_
 
     assert exit_code == 0
     assert calls["model_path"] == "models/alias-model"
+    assert calls["system_prompt"]
     assert calls["max_new_tokens"] == 64
     assert "模型路径：models/alias-model" in captured.out
 
@@ -1374,6 +1377,7 @@ def test_main_passes_custom_generation_parameters_for_model_test(
 
     assert exit_code == 0
     assert calls["model_path"] == "models/custom-model"
+    assert calls["system_prompt"]
     assert calls["max_new_tokens"] == 128
     assert calls["do_sample"] is False
     assert calls["temperature"] == 0.8
@@ -1381,6 +1385,111 @@ def test_main_passes_custom_generation_parameters_for_model_test(
     assert calls["top_k"] == 40
     assert calls["repetition_penalty"] == 1.1
     assert "生成参数：max_new_tokens=128, do_sample=False, temperature=0.8, top_p=0.95, top_k=40, repetition_penalty=1.1" in captured.out
+
+
+def test_main_loads_system_prompt_from_file_for_model_test(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    prompt_file = tmp_path / "system_prompt.txt"
+    prompt_file.write_text("你是一个严格遵循事实的测试助手。", encoding="utf-8")
+
+    calls = {}
+
+    def fake_run_model_test(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(
+            model_path=kwargs["model_path"],
+            user_input="请问退款怎么申请？",
+            model_class="AutoModelForCausalLM",
+            tokenizer_class="AutoTokenizer",
+            device="cuda",
+            generated_text="您可以在订单详情页提交退款申请。",
+        )
+
+    monkeypatch.setattr(cli, "run_model_test", fake_run_model_test)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "--action",
+            "model-test",
+            "--test-model-path",
+            "models/custom-model",
+            "--system-prompt-file",
+            str(prompt_file),
+        ],
+    )
+
+    exit_code = main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert calls["system_prompt"] == "你是一个严格遵循事实的测试助手。"
+    assert "系统指令：你是一个严格遵循事实的测试助手。" in captured.out
+
+
+def test_main_supports_system_prompt_flie_alias(monkeypatch, capsys, tmp_path) -> None:
+    monkeypatch.chdir(tmp_path)
+    prompt_file = tmp_path / "system_prompt.txt"
+    prompt_file.write_text("你是一个简洁的测试助手。", encoding="utf-8")
+
+    calls = {}
+
+    def fake_run_model_test(**kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(
+            model_path=kwargs["model_path"],
+            user_input="请问退款怎么申请？",
+            model_class="AutoModelForCausalLM",
+            tokenizer_class="AutoTokenizer",
+            device="cuda",
+            generated_text="您可以在订单详情页提交退款申请。",
+        )
+
+    monkeypatch.setattr(cli, "run_model_test", fake_run_model_test)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "--action",
+            "model-test",
+            "--test-model-path",
+            "models/custom-model",
+            "--system-prompt-flie",
+            str(prompt_file),
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["system_prompt"] == "你是一个简洁的测试助手。"
+
+
+def test_main_rejects_empty_system_prompt_file(monkeypatch, capsys, tmp_path) -> None:
+    prompt_file = tmp_path / "system_prompt.txt"
+    prompt_file.write_text(" \n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "--action",
+            "model-test",
+            "--test-model-path",
+            "models/custom-model",
+            "--system-prompt-file",
+            str(prompt_file),
+        ],
+    )
+
+    exit_code = main()
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert f"system prompt 文件内容为空：{prompt_file}" in captured.out
 
 
 def test_main_rejects_invalid_generation_parameters_for_model_test(monkeypatch, capsys) -> None:
@@ -1552,3 +1661,63 @@ def test_main_supports_file_based_model_test_without_expected_result(
     assert tested["模型结果"].tolist() == ["回答:退款怎么申请"]
     assert "模型调用时间" in tested.columns
     assert "匹配预期" not in tested.columns
+
+
+def test_main_passes_system_prompt_to_file_based_model_test(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    input_file = tmp_path / "input.csv"
+    prompt_file = tmp_path / "system_prompt.txt"
+    pd.DataFrame({"用户输入": ["退款怎么申请"]}).to_csv(input_file, index=False)
+    prompt_file.write_text("你是一个用于批量测试的助手。", encoding="utf-8")
+
+    calls = {}
+
+    def fake_model_test_dataframe(
+        dataframe,
+        model_path,
+        *,
+        runtime_config,
+        target_column="text",
+        progress_callback=None,
+    ):
+        calls["system_prompt"] = runtime_config.system_prompt
+        if progress_callback:
+            progress_callback(len(dataframe))
+        tested = dataframe.copy()
+        tested["模型结果"] = ["回答:退款怎么申请"]
+        tested["模型调用时间"] = [0.11]
+        stats = BatchModelTestStats(
+            total_rows=1,
+            target_column="用户输入",
+            has_expected_result=False,
+            matched_expected_count=0,
+            average_call_time_seconds=0.11,
+            model_path=str(model_path),
+            device="cuda:0",
+            num_workers=1,
+            batch_size=runtime_config.batch_size,
+        )
+        return tested, stats
+
+    monkeypatch.setattr(cli, "model_test_dataframe", fake_model_test_dataframe)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "--action",
+            "model-test",
+            "--input-file",
+            str(input_file),
+            "--test-model-path",
+            "models/custom-model",
+            "--system-prompt-file",
+            str(prompt_file),
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["system_prompt"] == "你是一个用于批量测试的助手。"

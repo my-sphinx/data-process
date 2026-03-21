@@ -13,6 +13,19 @@ import pandas as pd
 from mysphinx_forge.cleaning import resolve_target_column
 from mysphinx_forge.deduplication import normalize_dedup_text
 
+SYSTEM_PROMPT = """
+你是一个专业的金融客服，任务是对用户的问题进行归类。
+# 输出格式（只能是以下类别中的一个）：
+1. 股票
+2. 基金
+
+输出要求：
+- 只能输出“股票”或“基金”
+- 不要输出任何解释
+- 不要输出思考过程
+- 不要输出标点、换行、前后缀或其他文字
+"""
+
 MODEL_TEST_USER_INPUT = "请问退款怎么申请？"
 MODEL_RESULT_COLUMN = "模型结果"
 EXPECTED_RESULT_COLUMN = "预期结果"
@@ -49,6 +62,7 @@ class BatchModelTestStats:
 
 @dataclass(slots=True)
 class ModelTestRuntimeConfig:
+    system_prompt: str = SYSTEM_PROMPT
     max_new_tokens: int = 64
     do_sample: bool = False
     temperature: float = 1.0
@@ -64,6 +78,7 @@ class LocalModelTester:
         self,
         model_path: str | Path,
         *,
+        system_prompt: str = SYSTEM_PROMPT,
         do_sample: bool = False,
         temperature: float = 1.0,
         top_p: float = 1.0,
@@ -82,6 +97,7 @@ class LocalModelTester:
             raise ValueError("未安装模型测试所需依赖，请先执行 uv sync。") from exc
 
         self.model_path = resolved_model_path
+        self.system_prompt = system_prompt.strip()
         self.do_sample = do_sample
         self.temperature = temperature
         self.top_p = top_p
@@ -117,7 +133,10 @@ class LocalModelTester:
         return self.generate_texts([user_input], max_new_tokens=max_new_tokens)[0]
 
     def generate_texts(self, user_inputs: list[object], *, max_new_tokens: int = 64) -> list[str]:
-        prompts = ["" if pd.isna(value) else str(value).strip() for value in user_inputs]
+        prompts = [
+            self._build_prompt("" if pd.isna(value) else str(value).strip())
+            for value in user_inputs
+        ]
         encoded = self.tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
         input_ids = encoded["input_ids"].to(self.device)
         attention_mask = encoded.get("attention_mask")
@@ -162,10 +181,27 @@ class LocalModelTester:
             outputs.append(generated_text)
         return outputs
 
+    def _build_prompt(self, user_input: str) -> str:
+        if hasattr(self.tokenizer, "apply_chat_template"):
+            messages = []
+            if self.system_prompt:
+                messages.append({"role": "system", "content": self.system_prompt})
+            messages.append({"role": "user", "content": user_input})
+            return self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+
+        if self.system_prompt:
+            return f"系统指令：{self.system_prompt}\n\n用户输入：{user_input}\n\n助手："
+        return user_input
+
 
 def run_model_test(
     model_path: str | Path,
     user_input: str = MODEL_TEST_USER_INPUT,
+    system_prompt: str = SYSTEM_PROMPT,
     max_new_tokens: int = 64,
     do_sample: bool = False,
     temperature: float = 1.0,
@@ -175,6 +211,7 @@ def run_model_test(
 ) -> ModelTestResult:
     tester = LocalModelTester(
         model_path=model_path,
+        system_prompt=system_prompt,
         do_sample=do_sample,
         temperature=temperature,
         top_p=top_p,
@@ -284,6 +321,7 @@ def _run_single_process_batches(
 ) -> tuple[list[str], list[float], str]:
     tester = LocalModelTester(
         model_path=model_path,
+        system_prompt=runtime_config.system_prompt,
         do_sample=runtime_config.do_sample,
         temperature=runtime_config.temperature,
         top_p=runtime_config.top_p,
@@ -324,6 +362,7 @@ def _run_multi_worker_batches(
                 {
                     "model_path": str(model_path),
                     "device": device,
+                    "system_prompt": runtime_config.system_prompt,
                     "max_new_tokens": runtime_config.max_new_tokens,
                     "do_sample": runtime_config.do_sample,
                     "temperature": runtime_config.temperature,
@@ -374,6 +413,7 @@ def _batch_model_test_worker(task_queue, result_queue, worker_config: dict[str, 
     try:
         tester = LocalModelTester(
             model_path=worker_config["model_path"],
+            system_prompt=str(worker_config["system_prompt"]),
             do_sample=bool(worker_config["do_sample"]),
             temperature=float(worker_config["temperature"]),
             top_p=float(worker_config["top_p"]),

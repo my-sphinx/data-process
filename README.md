@@ -131,6 +131,12 @@ OPENAI_API_KEY=<你的密钥> uv run python main.py --action cluster --input-fil
 uv run python main.py --action model-test --test-model-path models/your-chat-model
 ```
 
+通过文件指定 system prompt 执行模型测试：
+
+```bash
+uv run python main.py --action model-test --test-model-path models/your-chat-model --system-prompt-file prompts/system.txt
+```
+
 基于清洗/去重后的文件批量执行模型测试：
 
 ```bash
@@ -143,7 +149,7 @@ uv run python main.py --action model-test --input-file data/input_deduplicated.c
 uv run python main.py --action model-test --test-model-path models/your-chat-model --max-new-tokens 128 --temperature 1.0 --top-p 1.0 --top-k 0 --repetition-penalty 1.05 --no-do-sample
 ```
 
-当 `model-test` 提供 `--input-file` 时，程序会读取文件中的目标列作为用户输入，生成一个新的 `*_model_tested` 文件，并追加新列 `模型结果` 和 `模型调用时间`。如果原文件中存在 `预期结果` 列，则还会自动追加 `匹配预期` 列，按 `预期结果` 与 `模型结果` 的标准化文本是否一致输出 `True/False`。未提供 `--input-file` 时，仍会使用代码里的固定变量模拟单条“用户输入”，对应变量是 `mysphinx_forge/model_testing.py` 中的 `MODEL_TEST_USER_INPUT`。这里的测试模型与 embedding 模型是两条独立链路。推荐使用 `--test-model-path`，`--model-path` 仅作为别名保留。当前默认生成策略为稳定模式：`do_sample=False`、`temperature=1.0`、`top_p=1.0`、`top_k=0`、`repetition_penalty=1.05`。
+当 `model-test` 提供 `--input-file` 时，程序会读取文件中的目标列作为用户输入，生成一个新的 `*_model_tested` 文件，并追加新列 `模型结果` 和 `模型调用时间`。如果原文件中存在 `预期结果` 列，则还会自动追加 `匹配预期` 列，按 `预期结果` 与 `模型结果` 的标准化文本是否一致输出 `True/False`。未提供 `--input-file` 时，仍会使用代码里的固定变量模拟单条“用户输入”，对应变量是 `mysphinx_forge/model_testing.py` 中的 `MODEL_TEST_USER_INPUT`。模型测试还内置了硬编码默认 `SYSTEM_PROMPT`，如果传入 `--system-prompt-file`（兼容别名 `--system-prompt-flie`），则文件内容优先覆盖默认值。这里的测试模型与 embedding 模型是两条独立链路。推荐使用 `--test-model-path`，`--model-path` 仅作为别名保留。当前默认生成策略为稳定模式：`do_sample=False`、`temperature=1.0`、`top_p=1.0`、`top_k=0`、`repetition_penalty=1.05`。
 
 批量模型测试会优先按可见 GPU 数自动分配 worker，每个 worker 绑定单独 device，并在 worker 内按 batch 执行推理；没有 GPU 时会自动退化成单 worker。执行过程中会实时显示整体进度。
 
@@ -164,6 +170,7 @@ uv run python main.py --action model-test --test-model-path models/your-chat-mod
 | `--batch-size` | 否 | 指定语义去重时 embedding 编码批大小。仅对 `--dedupe-mode semantic` 生效。 | 大于 `0` 的整数，默认 `64` |
 | `--test-model-path` | 否 | 指定模型测试使用的本地模型目录。仅对 `--action model-test` 生效。 | 合法本地模型目录路径 |
 | `--model-path` | 否 | `--test-model-path` 的别名，便于兼容和简写。 | 合法本地模型目录路径 |
+| `--system-prompt-file` | 否 | 指定模型测试使用的 system prompt 文件路径；如果提供，文件内容优先于代码内置默认 system prompt。兼容别名 `--system-prompt-flie`。 | 合法文本文件路径 |
 | `--max-new-tokens` | 否 | 模型测试时最大生成 token 数。 | 大于 `0` 的整数，默认 `64` |
 | `--do-sample` | 否 | 模型测试时启用采样生成。 | 默认关闭 |
 | `--no-do-sample` | 否 | 模型测试时关闭采样，改为确定性生成。 | 默认即关闭 |
@@ -205,6 +212,7 @@ uv run python main.py --action model-test --test-model-path models/your-chat-mod
 | 调整 `HDBSCAN` 最小簇大小 | `uv run python main.py --action cluster --input-file data.csv --cluster-mode hdbscan --min-cluster-size 8` |
 | 使用 LLM 生成聚类摘要标签 | `OPENAI_API_KEY=... uv run python main.py --action cluster --input-file data.csv --cluster-label-mode llm` |
 | 执行简单模型测试 | `uv run python main.py --action model-test --test-model-path models/your-chat-model` |
+| 通过文件指定 system prompt 执行模型测试 | `uv run python main.py --action model-test --test-model-path models/your-chat-model --system-prompt-file prompts/system.txt` |
 | 基于去重结果文件批量执行模型测试 | `uv run python main.py --action model-test --input-file data/input_deduplicated.csv --test-model-path models/your-chat-model` |
 | 指定 worker 数和 batch 大小执行批量模型测试 | `uv run python main.py --action model-test --input-file data/input_deduplicated.csv --test-model-path models/your-chat-model --model-test-num-workers auto --model-test-batch-size 8` |
 | 自定义生成参数执行模型测试 | `uv run python main.py --action model-test --test-model-path models/your-chat-model --max-new-tokens 128 --temperature 1.0 --top-p 1.0 --top-k 0 --repetition-penalty 1.05 --no-do-sample` |

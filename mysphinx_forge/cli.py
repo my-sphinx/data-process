@@ -33,6 +33,7 @@ from mysphinx_forge.logging_utils import close_logger, configure_logger
 from mysphinx_forge.model_testing import (
     BatchModelTestStats,
     ModelTestRuntimeConfig,
+    SYSTEM_PROMPT,
     model_test_dataframe,
     run_model_test,
 )
@@ -106,6 +107,13 @@ def main() -> int:
         dest="test_model_path",
         default="",
         help="模型测试使用的本地模型路径。--model-path 为其别名，仅对 --action model-test 生效。",
+    )
+    parser.add_argument(
+        "--system-prompt-file",
+        "--system-prompt-flie",
+        dest="system_prompt_file",
+        default="",
+        help="模型测试使用的 system prompt 文件路径。若提供，则文件内容优先于代码中的默认 system prompt。",
     )
     parser.add_argument(
         "--batch-size",
@@ -333,11 +341,18 @@ def main() -> int:
             args.cluster_label_sample_size,
         )
     if args.action == "model-test":
+        try:
+            system_prompt = _resolve_system_prompt(args.system_prompt_file)
+        except ValueError as exc:
+            print(str(exc))
+            return 1
+
         return _run_model_test(
             model_path=args.test_model_path,
             input_file=args.input_file,
             output_arg=args.output,
             target_column=args.target_column,
+            system_prompt=system_prompt,
             max_new_tokens=args.max_new_tokens,
             do_sample=args.do_sample,
             temperature=args.temperature,
@@ -814,6 +829,7 @@ def _run_model_test(
     input_file: str | None,
     output_arg: str | None,
     target_column: str,
+    system_prompt: str,
     max_new_tokens: int,
     do_sample: bool,
     temperature: float,
@@ -829,6 +845,7 @@ def _run_model_test(
             output_arg=output_arg,
             target_column=target_column,
             model_path=model_path,
+            system_prompt=system_prompt,
             max_new_tokens=max_new_tokens,
             do_sample=do_sample,
             temperature=temperature,
@@ -846,6 +863,7 @@ def _run_model_test(
     try:
         result = run_model_test(
             model_path=model_path,
+            system_prompt=system_prompt,
             max_new_tokens=max_new_tokens,
             do_sample=do_sample,
             temperature=temperature,
@@ -866,6 +884,7 @@ def _run_model_test(
     _emit_message("模型测试完成", logger)
     _emit_message(f"模型路径：{result.model_path}", logger)
     _emit_message(f"测试输入：{result.user_input}", logger)
+    _emit_message(f"系统指令：{system_prompt}", logger)
     _emit_message(f"模型类型：{result.model_class}", logger)
     _emit_message(f"Tokenizer 类型：{result.tokenizer_class}", logger)
     _emit_message(f"推理设备：{result.device}", logger)
@@ -889,6 +908,7 @@ def _run_model_test_on_file(
     output_arg: str | None,
     target_column: str,
     model_path: str,
+    system_prompt: str,
     max_new_tokens: int,
     do_sample: bool,
     temperature: float,
@@ -912,6 +932,7 @@ def _run_model_test_on_file(
                 dataframe=dataframe,
                 model_path=model_path,
                 runtime_config=ModelTestRuntimeConfig(
+                    system_prompt=system_prompt,
                     max_new_tokens=max_new_tokens,
                     do_sample=do_sample,
                     temperature=temperature,
@@ -959,6 +980,20 @@ def _run_model_test_on_file(
     )
     close_logger()
     return 0
+
+
+def _resolve_system_prompt(system_prompt_file: str) -> str:
+    if not system_prompt_file:
+        return SYSTEM_PROMPT
+
+    prompt_path = Path(system_prompt_file)
+    try:
+        system_prompt = prompt_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise ValueError(f"读取 system prompt 文件失败：{prompt_path}，{type(exc).__name__}: {exc}") from exc
+    if not system_prompt:
+        raise ValueError(f"system prompt 文件内容为空：{prompt_path}")
+    return system_prompt
 
 
 def _run_clean_csv_stream(
